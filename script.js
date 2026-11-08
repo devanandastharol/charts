@@ -6,15 +6,36 @@ const YEAR_END = new Date().getFullYear() - 1;   // last complete year
 const YEAR_START = YEAR_END - 9;
 const POWER = 'https://power.larc.nasa.gov/api/temporal';
 
-// Sample fields (TODO: teammates can replace crop/health with real rotation results)
-const zones = [
-  { name:'Field A', crop:'Maize',      health:62, color:'#e8a317', dx:-.00225, dy: .00175 },
-  { name:'Field B', crop:'Soybean',    health:78, color:'#4f9d4e', dx: .00225, dy: .00175 },
-  { name:'Field C', crop:'Wheat',      health:55, color:'#c9b458', dx:-.00225, dy:-.00175 },
-  { name:'Field D', crop:'Cover crop', health:85, color:'#0f6b66', dx: .00225, dy:-.00175 }
+/* Crop needs (approximate, for demo; teammates can refine).
+   dur      = months from sowing to harvest
+   tCold    = monthly mean temp (°C) below which growth is badly hurt
+   tLo/tHi  = comfortable temperature range
+   tHot     = monthly mean temp where heat stress becomes severe
+   rainMin/rainMax = rainfall (mm) over the whole growing period
+   soilMin  = root-zone soil wetness (0-1) below which the crop is short of water */
+const CROPS = {
+  Rice:      { dur: 4,  tCold: 15, tLo: 22, tHi: 30, tHot: 36, rainMin: 900,  rainMax: 1800, soilMin: .50 },
+  Wheat:     { dur: 5,  tCold: 2,  tLo: 10, tHi: 22, tHot: 30, rainMin: 250,  rainMax: 600,  soilMin: .35 },
+  Maize:     { dur: 4,  tCold: 10, tLo: 18, tHi: 28, tHot: 34, rainMin: 450,  rainMax: 800,  soilMin: .40 },
+  Soybean:   { dur: 4,  tCold: 12, tLo: 20, tHi: 28, tHot: 34, rainMin: 450,  rainMax: 750,  soilMin: .40 },
+  Cotton:    { dur: 6,  tCold: 15, tLo: 22, tHi: 30, tHot: 36, rainMin: 500,  rainMax: 900,  soilMin: .35 },
+  Sugarcane: { dur: 12, tCold: 15, tLo: 24, tHi: 32, tHot: 37, rainMin: 1100, rainMax: 1800, soilMin: .45 },
+  Millet:    { dur: 4,  tCold: 15, tLo: 24, tHi: 32, tHot: 38, rainMin: 250,  rainMax: 500,  soilMin: .25 },
+  Groundnut: { dur: 4,  tCold: 15, tLo: 22, tHi: 30, tHot: 35, rainMin: 450,  rainMax: 700,  soilMin: .30 },
+  Potato:    { dur: 4,  tCold: 5,  tLo: 12, tHi: 20, tHot: 27, rainMin: 350,  rainMax: 600,  soilMin: .45 },
+  Tomato:    { dur: 4,  tCold: 10, tLo: 18, tHi: 26, tHot: 32, rainMin: 400,  rainMax: 700,  soilMin: .45 }
+};
+
+// Risk factors and how much each one counts towards the overall score (weights add up to 1)
+const FACTORS = [
+  { key: 'heat',    label: 'Heat stress',    color: '#d9481f', w: .25 },
+  { key: 'cold',    label: 'Cold stress',    color: '#3a9bdc', w: .15 },
+  { key: 'drought', label: 'Water shortage', color: '#e8a317', w: .30 },
+  { key: 'flood',   label: 'Excess rain',    color: '#5b6bbf', w: .15 },
+  { key: 'soil',    label: 'Dry soil',       color: '#8a5a3c', w: .15 }
 ];
 
-/* ---------- 2. MAP ---------- */
+/* ---------- 2. MAP (one marker at the exact point) ---------- */
 const map = L.map('map').setView([farm.lat, farm.lng], 14);
 const layers = {
   sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -28,31 +49,14 @@ document.getElementById('layerSel').onchange = e => {
   layers[e.target.value].addTo(map);
 };
 
-const zoneGroup = L.layerGroup().addTo(map);
 const marker = L.marker([farm.lat, farm.lng]).addTo(map);
 marker.bindPopup('Loading NASA data…');
 
-function drawZones() {
-  zoneGroup.clearLayers();
-  const w = .0045, h = .0035;                    // field size in degrees (~500 m x 390 m)
-  zones.forEach(z => {
-    const cy = farm.lat + z.dy, cx = farm.lng + z.dx;
-    const rect = L.rectangle([[cy + h / 2, cx - w / 2], [cy - h / 2, cx + w / 2]],
-      { color: '#fff', weight: 2, fillColor: z.color, fillOpacity: .5 });
-    rect.bindPopup(`<b>${z.name}</b><br>Crop: ${z.crop}<br>Soil health: ${z.health}/100`);
-    rect.bindTooltip(z.name, { permanent: true, direction: 'center' });
-    zoneGroup.addLayer(rect);
-  });
-  marker.setLatLng([farm.lat, farm.lng]);
-}
-drawZones();
-
-// Main entry point: put the marker at the exact point and load the data
 function showLocation(lat, lng, zoom = 14) {
   farm = { lat, lng };
   document.getElementById('latIn').value = lat.toFixed(5);
   document.getElementById('lngIn').value = lng.toFixed(5);
-  drawZones();
+  marker.setLatLng([lat, lng]);
   map.setView([lat, lng], zoom);
   marker.setPopupContent('Loading NASA data…');
   loadAll();
@@ -105,12 +109,68 @@ const dailyChart = mk('dailyChart', { type: 'bar', data: { labels: [], datasets:
   y1: { position: 'right', title: { display: true, text: 'mm' }, grid: { drawOnChartArea: false }, beginAtZero: true }
 }}});
 
-mk('zoneChart', { type: 'bar', data: {
-  labels: zones.map(z => `${z.name} (${z.crop})`),
-  datasets: [{ label: 'Soil health', data: zones.map(z => z.health), backgroundColor: zones.map(z => z.color) }]
-}, options: { ...base, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100 } } } });
+// Pie chart: how the overall risk is made up (green slice = favourable conditions)
+const riskChart = mk('riskChart', { type: 'pie', data: {
+  labels: [...FACTORS.map(f => f.label), 'Favourable conditions'],
+  datasets: [{ data: [0, 0, 0, 0, 0, 100],
+    backgroundColor: [...FACTORS.map(f => f.color), '#4f9d4e'], borderColor: '#fff', borderWidth: 2 }]
+}, options: { ...base, plugins: { legend: { position: 'right' },
+  tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed.toFixed(1)}% of total` } } } } });
 
-/* ---------- 4. NASA POWER DATA (free, no API key) ---------- */
+/* ---------- 4. CROP RISK ---------- */
+let climate = null;     // 10-year monthly averages: { t:[12] °C, r:[12] mm, s:[12] 0-1 }
+
+const cropSel = document.getElementById('cropSel');
+const monthSel = document.getElementById('monthSel');
+Object.keys(CROPS).forEach(c => cropSel.add(new Option(c, c)));
+MONTHS.forEach((m, i) => monthSel.add(new Option(m, i)));
+cropSel.value = 'Maize';
+monthSel.value = new Date().getMonth();
+cropSel.onchange = monthSel.onchange = updateRisk;
+
+const clip = x => Math.max(0, Math.min(1, x));
+const avgOf = a => a.length ? a.reduce((x, y) => x + y) / a.length : null;
+const valid = a => a.filter(v => v !== null && v !== undefined);
+
+function computeRisk(crop, startMonth) {
+  const idx = Array.from({ length: crop.dur }, (_, i) => (startMonth + i) % 12);
+  const T = valid(idx.map(i => climate.t[i])), S = valid(idx.map(i => climate.s[i]));
+  const rainMonths = valid(idx.map(i => climate.r[i]));
+  if (!T.length || !rainMonths.length) return null;
+  const R = rainMonths.reduce((x, y) => x + y);
+  const scores = {
+    heat:    avgOf(T.map(t => clip((t - crop.tHi) / (crop.tHot - crop.tHi)))) * 100,
+    cold:    avgOf(T.map(t => clip((crop.tLo - t) / (crop.tLo - crop.tCold)))) * 100,
+    drought: clip((crop.rainMin - R) / crop.rainMin) * 100,
+    flood:   clip((R - crop.rainMax) / crop.rainMax) * 100,
+    soil:    S.length ? avgOf(S.map(s => clip((crop.soilMin - s) / crop.soilMin))) * 100 : 0
+  };
+  const parts = FACTORS.map(f => scores[f.key] * f.w);    // each factor's share of the overall risk
+  const overall = parts.reduce((x, y) => x + y);
+  return { scores, parts, overall, R, T: avgOf(T), idx };
+}
+
+function updateRisk() {
+  const box = document.getElementById('riskSummary');
+  if (!climate) { box.textContent = 'Waiting for NASA data…'; return; }
+  const name = cropSel.value, crop = CROPS[name], start = +monthSel.value;
+  const r = computeRisk(crop, start);
+  if (!r) { box.textContent = 'Not enough NASA data for this location.'; return; }
+
+  const level = r.overall < 25 ? 'Low' : r.overall < 50 ? 'Moderate' : 'High';
+  riskChart.data.datasets[0].data = [...r.parts.map(v => +v.toFixed(1)), +(100 - r.overall).toFixed(1)];
+  riskChart.update();
+
+  const top = FACTORS.map((f, i) => ({ f, v: r.parts[i] })).sort((a, b) => b.v - a.v)[0];
+  const main = top.v < 1 ? 'Conditions look favourable for this crop.' : `Biggest risk: ${top.f.label.toLowerCase()}.`;
+  const end = MONTHS[r.idx[r.idx.length - 1]];
+  box.innerHTML =
+    `<div class="risk-score ${level}">${r.overall.toFixed(0)} / 100<small>${level} risk for ${name}</small></div>` +
+    `<div class="risk-meta">${main} Growing period ${MONTHS[start]}–${end}: about ${r.R.toFixed(0)} mm rain ` +
+    `(${name.toLowerCase()} needs ${crop.rainMin}–${crop.rainMax} mm), average ${r.T.toFixed(1)} °C.</div>`;
+}
+
+/* ---------- 5. NASA POWER DATA (free, no API key) ---------- */
 function setStatus(t, isError = false) {
   const el = document.getElementById('status');
   el.textContent = t;
@@ -120,7 +180,6 @@ function setStatus(t, isError = false) {
 const ok = v => typeof v === 'number' && v > -900;          // NASA uses -999 for "no data"
 const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const pretty = s => `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
-const avgOf = a => a.length ? a.reduce((x, y) => x + y) / a.length : null;
 const fmt = (v, d = 1) => v === null || v === undefined ? '–' : v.toFixed(d);
 
 function split(series) {            // {"201501": v, ...} -> {avg[12], last[12]}
@@ -155,9 +214,12 @@ async function getJSON(url) {
 async function loadMonthly() {
   const p = await getJSON(`${POWER}/monthly/point?parameters=T2M,PRECTOTCORR,GWETROOT&community=AG` +
     `&longitude=${farm.lng.toFixed(4)}&latitude=${farm.lat.toFixed(4)}&start=${YEAR_START}&end=${YEAR_END}&format=JSON`);
-  setData(tempChart, split(p.T2M));
-  setData(rainChart, split(p.PRECTOTCORR), i => DAYS[i]);   // mm/day -> mm/month
-  setData(soilChart, split(p.GWETROOT));
+  const t = split(p.T2M), r = split(p.PRECTOTCORR), s = split(p.GWETROOT);
+  setData(tempChart, t);
+  setData(rainChart, r, i => DAYS[i]);   // mm/day -> mm/month
+  setData(soilChart, s);
+  climate = { t: t.avg, r: r.avg.map((v, i) => v === null ? null : v * DAYS[i]), s: s.avg };
+  updateRisk();
 }
 
 // Near-real-time daily data (last 30 days, NASA usually lags 1-3 days)
@@ -176,12 +238,10 @@ async function loadDaily() {
   const last = dates[dates.length - 1];
   const rain30 = dates.reduce((s, d) => s + (ok(p.PRECTOTCORR[d]) ? p.PRECTOTCORR[d] : 0), 0);
   const get = k => ok(p[k][last]) ? p[k][last] : null;
-  const latest = {
+  showStats({
     date: pretty(last), temp: get('T2M'), tmax: get('T2M_MAX'), tmin: get('T2M_MIN'),
-    rain: get('PRECTOTCORR'), rh: get('RH2M'), soil: get('GWETROOT'),
-    rain30, temp30: avgOf(dates.map(d => p.T2M[d]))
-  };
-  showStats(latest);
+    rain: get('PRECTOTCORR'), rh: get('RH2M'), soil: get('GWETROOT'), rain30
+  });
 }
 
 function showStats(s) {
@@ -220,12 +280,14 @@ async function loadAll() {
   }
 }
 
-function useSample() {   // backup so the monthly charts never look empty
+function useSample() {   // backup so the monthly charts and risk pie never look empty
   const t = [24,26,29,31,32,29,27,27,27,27,25,24], r = [8,10,18,45,110,260,310,270,190,150,70,15];
   const s = [.35,.3,.28,.3,.4,.6,.75,.75,.7,.6,.5,.4];
   setData(tempChart, { avg: t, last: t.map(v => v + 1) });
   setData(rainChart, { avg: r, last: r.map(v => v * .8) });
   setData(soilChart, { avg: s, last: s.map(v => v * .85) });
+  climate = { t, r, s };
+  updateRisk();
 }
 
 loadAll();
