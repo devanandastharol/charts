@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Field Shift – Farm Map & Climate Charts</title>
+<title>Field Shift – Farm Map & Crop Risk</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
   <h1>Field Shift: your farm and its climate</h1>
-  <p>Enter coordinates or click the map. We pin the exact point and pull NASA POWER data for it.</p>
+  <p>Enter coordinates, pick a crop, and see its climate risk based on NASA POWER data.</p>
 </header>
 
 <main>
   <section class="card">
-    <h2>Farm map</h2>
+    <h2>Farm location</h2>
     <form id="coordForm" class="coords">
       <label>Latitude
         <input id="latIn" type="number" step="any" min="-90" max="90" required value="20.59">
@@ -37,11 +37,32 @@
 
   <section class="charts">
     <div class="card">
+      <h2>Crop risk</h2>
+      <div class="controls">
+        <label>Crop
+          <select id="cropSel"></select>
+        </label>
+        <label>Sowing month
+          <select id="monthSel"></select>
+        </label>
+      </div>
+      <div id="riskSummary" class="risk-summary">Loading…</div>
+      <div class="chart-box tall"><canvas id="riskChart"></canvas></div>
+      <p class="stats-note">Estimate for a rain-fed crop, from 10-year NASA monthly averages over the growing period. Irrigation lowers water risks.</p>
+    </div>
+    <div class="card">
       <h2>Latest NASA readings at this point</h2>
       <div id="stats" class="stats">Loading…</div>
     </div>
-    <div class="card"><h2>Temperature: this year vs 10-year average (°C)</h2><div class="chart-box"><canvas id="tempChart"></canvas></div></div>
-    <div class="card"><h2>Monthly rainfall (mm)</h2><div class="chart-box"><canvas id="rainChart"></canvas></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Temperature: this year vs 10-year average (°C)</h2>
+    <div class="chart-box"><canvas id="tempChart"></canvas></div>
+  </section>
+  <section class="card">
+    <h2>Monthly rainfall (mm)</h2>
+    <div class="chart-box"><canvas id="rainChart"></canvas></div>
   </section>
 
   <section class="card wide">
@@ -52,11 +73,6 @@
   <section class="card wide">
     <h2>Root-zone soil wetness (0 = dry, 1 = saturated)</h2>
     <div class="chart-box"><canvas id="soilChart"></canvas></div>
-  </section>
-
-  <section class="card wide">
-    <h2>Soil health score by field (sample data: replace with your team's model)</h2>
-    <div class="chart-box"><canvas id="zoneChart"></canvas></div>
   </section>
 </main>
 
