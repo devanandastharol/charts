@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Shift – Farm Map & Climate Charts</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Field Shift: your farm and its climate</h1>
+  <p>Click the map to move the farm. Charts load NASA POWER satellite data for that spot.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Farm map</h2>
+    <div class="controls">
+      <label>Layer
+        <select id="layerSel"><option value="sat">Satellite</option><option value="street">Street</option></select>
+      </label>
+      <button id="locBtn">Use my location</button>
+    </div>
+    <div id="map"></div>
+    <p id="status">Loading…</p>
+  </section>
+
+  <section class="charts">
+    <div class="card"><h2>Temperature: this year vs 10-year average (°C)</h2><div class="chart-box"><canvas id="tempChart"></canvas></div></div>
+    <div class="card"><h2>Monthly rainfall (mm)</h2><div class="chart-box"><canvas id="rainChart"></canvas></div></div>
+  </section>
+
+  <section class="card wide">
+    <h2>Root-zone soil wetness (0 = dry, 1 = saturated)</h2>
+    <div class="chart-box"><canvas id="soilChart"></canvas></div>
+  </section>
+
+  <section class="card wide">
+    <h2>Soil health score by field (sample data: replace with your team's model)</h2>
+    <div class="chart-box"><canvas id="zoneChart"></canvas></div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
